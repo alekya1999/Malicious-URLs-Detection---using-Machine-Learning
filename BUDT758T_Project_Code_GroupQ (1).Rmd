@@ -1,0 +1,344 @@
+---
+title: "DM_Project"
+author: "Alekya Sri Sai Ghanta"
+date: "`r Sys.Date()`"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+```{r Loading Data}
+URLS<- read.csv("RawData_Feature_Engineered_BUDT758T_Project_GroupQ.csv")
+URLS$X <- NULL
+set.seed(123457)
+URLS$URL <- NULL
+URLS$Top_Level_Domain <- NULL
+URLS$Label <- factor(URLS$Label)
+URLS$dot_count <- factor(URLS$dot_count)
+URLS$Count_WWW <- factor(URLS$Count_WWW)
+URLS$X._Presence <- factor(URLS$X._Presence)
+URLS$suspicious_words <- factor(URLS$suspicious_words)
+URLS$Presence_of_https <- factor(URLS$Presence_of_https)
+URLS$shortening_services <- factor(URLS$shortening_services)
+set.seed(12345)
+inTrain <- sample(nrow(URLS), 0.7*nrow(URLS))
+data_train <- data.frame(URLS[inTrain,])
+data_test <- data.frame(URLS[-inTrain,])
+```
+
+```{r Summary}
+summary(URLS)
+```
+
+```{r Dealing with the na values}
+sum(is.na(URLS))
+```
+
+```{r EDA}
+library(ggplot2)
+
+# Calculate average length by Label type
+avg_length <- aggregate(URL_length ~ Label, data = URLS, FUN = mean)
+
+# Create ggplot object
+ggplot(avg_length, aes(x = Label, y = URL_length)) +
+  geom_bar(stat = "identity", fill = "steelblue",width = 0.2, color="black") +
+  labs(x = "Label", y = "Average Length of URL", title = "URL Length by Label Type") +
+   geom_text(aes(label = round(URL_length, 2), y = URL_length), vjust = -0.5)+ theme_classic()
+
+```
+
+```{r EDA1}
+library(ggplot2)
+
+# Create URL length distribution plot
+ggplot(URLS, aes(x = URL_length)) +
+  geom_histogram(fill = "steelblue", color = "white", bins = 20) +
+  labs(x = "URL Length", y = "Frequency", title = "Distribution of URL Lengths") +
+  theme_classic() +  scale_x_continuous(limits = c(0, 100),breaks = seq(0, 100, 10))
+
+
+```
+
+
+```{r EDA2}
+library(tidyverse)
+library(scales)
+
+# Pivot data into longer format
+library(dplyr)
+library(tidyr)
+
+data <- URLS %>%
+  group_by(Label, Count_WWW) %>%
+  count() %>%
+  ungroup() %>%
+  pivot_wider(names_from = Count_WWW, values_from = n) %>%
+  mutate(Total = `0` + `1`) %>%
+  mutate(Proportion_0 = `0` / Total, Proportion_1 = `1` / Total)
+
+data_long <- data %>%
+  pivot_longer(cols = c(Proportion_0, Proportion_1),
+               names_to = "Count_WWW",
+               values_to = "Proportion")
+
+# Create stacked 100% bar chart
+ggplot(data_long, aes(x = Label, y = Proportion, fill = Count_WWW)) +
+  geom_bar(position = "fill", stat = "identity", width = 0.5,color = "black") +
+  scale_fill_brewer(palette = "Blues", name = "Count of www") +
+  labs(x = "Label", y = "Proportion of URLs",fill = "Presence of multiple WWWs") + 
+  ggtitle("Proportion of URLs with multiple www's") +
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text = element_text(size = 14, color = "black"),
+        legend.title = element_text(size = 14, color = "black", face = "bold"),
+        legend.text = element_text(size = 12, color = "black")) +
+  theme_classic() +
+  geom_text(aes(label = paste0(round(Proportion*100, 1), "%")), 
+            position = position_fill(vjust = 0.6), 
+            color = "black", fontface = "bold") +
+  labs(y = "Proportion of URLs", scales = list(y = percent_format())) + 
+  scale_y_continuous(labels = percent_format()) +
+  scale_fill_manual(values = c("#D9EAD3", "#92B897"), 
+                    labels = c("No", "Yes"),)
+
+```
+
+
+```{r EDA3}
+library(ggplot2)
+library(dplyr)
+
+p2_data <- URLS %>%
+  group_by(suspicious_words, Label) %>%
+  count() %>%
+  ungroup()
+
+p2 <- p2_data %>%
+  ggplot(aes(x = n, y = Label, fill = suspicious_words)) +
+  geom_col(position = "dodge", color="black") +
+  labs(x = "No of URLs", y = "Label", fill="Suspicious Words Presence") + scale_fill_manual(values = c("#D9EAD3", "#92B897"), 
+                    labels = c("No", "Yes"),) + ggtitle("URLs with Suspecious Words")+
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text = element_text(size = 14, color = "black"),
+        legend.title = element_text(size = 14, color = "black", face = "bold"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.position = "bottom") +
+  theme_classic() +   geom_text(aes(x=n+2000 ,label = n),
+            color = "black", fontface = "bold", position = position_dodge(width = 0.9) ,
+            size = 4) 
+  labs(fill = "Suspicious Words", y = "No of URLs")
+p2
+
+```
+
+```{r EDA4}
+library(ggplot2)
+library(dplyr)
+
+p3_data <-  URLS%>%
+  group_by(Count_of_http, Label) %>%
+  count() %>%
+  ungroup()
+  #mutate(City = fct_relevel(City, "Naypyitaw","Yangon", "Mandalay"))
+
+p3 <- p3_data %>%
+  ggplot(aes(x=n, y=Label, fill=as.factor(Count_of_http))) +  # convert to factor
+  geom_col(position="dodge", color="black") +
+  labs(x = "No of URLs", y = "Label", fill="Suspicious Words Presence") + 
+ scale_fill_manual(values = c("#FFE5B4", "#FFB347","#FF7F50"),  # set colors for categorical variable
+                 labels = c("0","1","2")) +
+  ggtitle("URLs with multiple HTTP")+
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text = element_text(size = 14, color = "black"),
+        legend.title = element_text(size = 14, color = "black", face = "bold"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.position = "bottom") +
+  theme_classic() +   
+  geom_text(aes(x=n+2000, label=n), color = "black", fontface = "bold", 
+            position = position_dodge(width = 0.9), size = 4) +
+  labs(fill = "Count of HTTP")
+p3
+```
+
+
+```{r - EDA5}
+library(ggplot2)
+library(dplyr)
+
+p3_data <-  URLS%>%
+  group_by(Presence_of_https, Label) %>%
+  count() %>%
+  ungroup()
+  #mutate(City = fct_relevel(City, "Naypyitaw","Yangon", "Mandalay"))
+
+p3 <- p3_data %>%
+  ggplot(aes(y=n, x=Label, fill=as.factor(Presence_of_https))) +  # convert to factor
+  geom_col(position="dodge", color="black",width = 0.8) +
+  labs(x = "No of URLs", y = "Label", fill="Presence_of_https") + 
+ scale_fill_manual(values = c("#FFE5B4", "#FFB347"),  # set colors for categorical variable
+                 labels = c("No", "Yes")) +
+  ggtitle("Presence of HTTPS")+
+  theme(plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+        axis.text = element_text(size = 14, color = "black"),
+        legend.title = element_text(size = 14, color = "black", face = "bold"),
+        legend.text = element_text(size = 12, color = "black"),
+        legend.position = "bottom") +
+  theme_classic() +   
+  geom_text(aes(y=n+1000, label=n), color = "black", fontface = "bold", 
+            position = position_dodge(width = 0.9), size = 4) +
+  labs(fill = "Count of HTTPS")
+p3
+```
+
+
+
+```{r - Model Naive Bayes}
+library(e1071)
+set.seed(12345)
+model <- naiveBayes(Label~., data=data_train)
+model
+prediction.test_nv <- predict(model, newdata = data_test[,-1])
+```
+
+```{r}
+library(caret)
+cm_nv <- confusionMatrix(prediction.test_nv, data_test$Label)
+Acc_nv <- cm_nv$overall['Accuracy']
+cm_nv
+```
+
+
+```{r Gradient Boosting Model}
+set.seed(12345)
+library(gbm)
+boosting_URL=gbm(Label~.,data=data_train,distribution="multinomial")
+PREDboosting_URL = predict(boosting_URL,newdata=data_test, type = "response")
+
+```
+
+```{r}
+library(caret)
+predictedClasses_gb <- factor(colnames(PREDboosting_URL)[apply(PREDboosting_URL, 1, which.max)], levels = levels(data_test$Label))
+CM_gbm=table(predictedClasses_gb,data_test$Label)
+accuracy_gbm <- sum(predictedClasses_gb==data_test$Label)/length(data_test$Label)
+accuracy_gbm
+CM_clas_gbm <- confusionMatrix(predictedClasses_gb, data_test$Label)
+
+```
+```{r}
+CM_clas_gbm
+```
+
+
+```{r pruned Decision tree}
+set.seed(12345)
+library(tree)
+tree1=tree(Label~.,data_train)
+summary(tree1)
+
+plot(tree1)
+text(tree1,pretty=0)
+tree1
+
+cv1=cv.tree(tree1,FUN=prune.misclass)
+names(cv1)
+cv1
+
+plot(cv1$size,cv1$dev,type="b")
+
+prune1=prune.misclass(tree1,best=8)
+plot(prune1)
+text(prune1,pretty=0)
+
+tree.pred_pruned = predict(prune1,data_test,type="class")
+CM_pr <- confusionMatrix(tree.pred_pruned, data_test$Label)
+CM_pr
+```
+
+```{r}
+# We first do bagging (which is just RF with m = p)
+set.seed(12345)
+library(randomForest)
+bag1=randomForest(Label~., data=data_train, mtry=15, importance=TRUE)
+bag1
+
+yhat.bag = predict(bag1,newdata=data_test)
+plot(yhat.bag, data_test$Label)
+abline(0,1)
+mean((yhat.bag-data_test$Label)^2)
+importance(bag1)
+varImpPlot(bag1)
+
+tree.bag = predict(bag1,data_test,type="class")
+(CM_bag = table(data_test$Label,tree.bag))
+(Acc_bag = (CM_bag[1,1]+CM_bag[2,2]+CM_bag[3,3])/sum(CM_bag))
+
+CM_bagging <- confusionMatrix(tree.bag, data_test$Label)
+CM_bagging
+```
+```{r random forest}
+set.seed(12345)
+library(randomForest)
+
+rf=randomForest(Label~., data=data_train, mtry=8, importance=TRUE)
+yhat.rf = predict(rf,newdata=data_test)
+mean((yhat.rf-data_test$Label)^2)
+importance(rf)
+varImpPlot(rf)
+
+tree.rf = predict(rf,data_test,type="class")
+(CM_rf = table(data_test$Label,tree.rf))
+(Acc_rf = (CM_rf[1,1]+CM_rf[2,2]+CM_rf[3,3])/sum(CM_rf))
+
+
+CM_randomForest <- confusionMatrix(tree.rf, data_test$Label)
+CM_randomForest
+```
+
+```{r feature importance}
+ feat_imp_df <- importance(rf) %>% 
+    data.frame() %>% 
+    mutate(feature = row.names(.)) 
+
+  # plot dataframe
+  ggplot(feat_imp_df, aes(x = reorder(feature, MeanDecreaseGini), 
+                         y = MeanDecreaseGini)) +
+    geom_bar(stat='identity', fill="steelblue") +
+    coord_flip() +
+    theme_classic() +
+    labs(
+      x     = "Feature",
+      y     = "Mean Decrease in Gini",
+      title = "Feature Importance: by Mean Decrease in Gini"
+    ) + geom_text(aes(label = round(MeanDecreaseGini, 1), y = MeanDecreaseGini+800),size=3) + scale_x_discrete(labels = c("X._Presence" = "@_Presence"))
+```
+
+```{r}
+ feat_imp_df <- importance(rf) %>% 
+    data.frame() %>% 
+    mutate(feature = row.names(.)) 
+
+  # plot dataframe
+  ggplot(feat_imp_df, aes(x = reorder(feature, MeanDecreaseAccuracy), 
+                         y = MeanDecreaseAccuracy)) +
+    geom_bar(stat='identity', fill="steelblue") +
+    coord_flip() +
+    theme_classic() +
+    labs(
+      x     = "Feature",
+      y     = "Mean Decrease in Accuracy",
+      title = "Feature Importance: by Mean Decrease in Accuracy"
+    ) + geom_text(aes(label = round(MeanDecreaseAccuracy, 1), y = MeanDecreaseAccuracy+10),size=3) + scale_x_discrete(labels = c("X._Presence" = "@_Presence"))
+```
+
+
+
+
+
+
+
+
+
+
+
+
